@@ -54,6 +54,7 @@ nvk_entrypoints = custom_target(
 nvk_deps = [
   dep_libdrm,
   idep_nouveau_ws,
+  idep_nvidia_headers,
   idep_vulkan_runtime,
   idep_vulkan_util,
   idep_vulkan_wsi,
