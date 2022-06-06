@@ -5,6 +5,7 @@ nvk_files = files(
   'nvk_buffer.h',
   'nvk_cmd_buffer.c',
   'nvk_cmd_buffer.h',
+  'nvk_cmd_copy.c',
   'nvk_descriptor_set.h',
   'nvk_descriptor_set.c',
   'nvk_descriptor_set_layout.c',
@@ -77,6 +78,7 @@ libvulkan_nouveau = shared_library(
     nvk_files,
   ],
   include_directories : [
+    inc_gallium,
     inc_include,
     inc_src,
   ],
