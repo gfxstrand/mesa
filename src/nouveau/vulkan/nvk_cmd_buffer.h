@@ -3,6 +3,8 @@
 
 #include "nvk_private.h"
 
+#include "nouveau_push.h"
+
 #include "vulkan/runtime/vk_command_buffer.h"
 #include "vulkan/runtime/vk_command_pool.h"
 
@@ -21,6 +23,14 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(nvk_cmd_pool, vk.base, VkCommandPool,
 
 /** Root descriptor table.  This gets pushed to the GPU directly */
 struct nvk_root_descriptor_table {
+   union {
+      struct {
+         uint32_t block_size[3];
+         uint32_t grid_size[3];
+         uint32_t _pad[2];
+      } cs;
+   };
+
    /* Client push constants */
    uint8_t push[128];
 
@@ -37,6 +47,7 @@ struct nvk_descriptor_state {
 };
 
 struct nvk_compute_state {
+   struct nvk_compute_pipeline *pipeline;
    struct nvk_descriptor_state descriptors;
 };
 
@@ -67,6 +78,9 @@ struct nvk_cmd_buffer {
 };
 
 VkResult nvk_reset_cmd_buffer(struct nvk_cmd_buffer *cmd_buffer);
+void nvk_cmd_buffer_begin_compute(struct nvk_cmd_buffer *cmd,
+                                  const VkCommandBufferBeginInfo *pBeginInfo);
+
 
 VK_DEFINE_HANDLE_CASTS(nvk_cmd_buffer, vk.base, VkCommandBuffer,
                        VK_OBJECT_TYPE_COMMAND_BUFFER)
@@ -86,4 +100,44 @@ nvk_get_descriptors_state(struct nvk_cmd_buffer *cmd,
 bool
 nvk_cmd_buffer_upload_alloc(struct nvk_cmd_buffer *cmd_buffer, unsigned size,
                             uint64_t *addr, void **ptr);
+
+#define SUBC_CP(m) 1, (m)
+#define NVE4_CP(n) SUBC_CP(NVE4_COMPUTE_##n)
+#define SUBC_M2MF(m) 2, (m)
+#define SUBC_P2MF(m) 2, (m)
+#define NVC0_M2MF(n) SUBC_M2MF(NVC0_M2MF_##n)
+#define NV01_SUBCHAN_OBJECT                                      0x00000000
+
+/* legacy pushes */
+static inline void
+LPUSH_DATA(struct nvk_cmd_buffer *cmd, uint32_t data)
+{
+   *cmd->push->map++ = data;
+}
+
+static inline void
+LPUSH_DATAh(struct nvk_cmd_buffer *cmd, uint64_t data)
+{
+   *cmd->push->map++ = (uint32_t)(data >> 32);
+}
+
+static inline void
+LPUSH_DATAp(struct nvk_cmd_buffer *cmd, const void *data, uint32_t size)
+{
+   memcpy(cmd->push->map, data, size * 4);
+   cmd->push->map += size;
+}
+
+static inline void
+BEGIN_NVC0(struct nvk_cmd_buffer *cmd, int subc, int mthd, unsigned size)
+{
+   LPUSH_DATA (cmd, NVC0_FIFO_PKHDR_SQ(subc, mthd, size));
+}
+
+static inline void
+BEGIN_1IC0(struct nvk_cmd_buffer *cmd, int subc, int mthd, unsigned size)
+{
+   LPUSH_DATA (cmd, NVC0_FIFO_PKHDR_1I(subc, mthd, size));
+}
+
 #endif

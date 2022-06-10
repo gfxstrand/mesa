@@ -2,9 +2,13 @@
 
 #include "nvk_descriptor_set.h"
 #include "nvk_device.h"
+#include "nvk_pipeline.h"
 #include "nvk_physical_device.h"
 
 #include "nouveau_push.h"
+#include "nouveau_context.h"
+
+#include "nouveau/nouveau.h"
 
 static void
 nvk_destroy_cmd_buffer(struct nvk_cmd_buffer *cmd_buffer)
@@ -298,6 +302,16 @@ nvk_BeginCommandBuffer(VkCommandBuffer commandBuffer,
    else
       cmd->reset_on_submit = false;
 
+   struct nvk_device *dev = (struct nvk_device *)cmd->vk.base.device;
+
+   BEGIN_NVC0(cmd, SUBC_M2MF(NV01_SUBCHAN_OBJECT), 1);
+   LPUSH_DATA (cmd, dev->ctx->m2mf->oclass);
+
+   BEGIN_NVC0(cmd, SUBC_CP(NV01_SUBCHAN_OBJECT), 1);
+   LPUSH_DATA (cmd, dev->ctx->compute->oclass);
+
+   nvk_cmd_buffer_begin_compute(cmd, pBeginInfo);
+
    return VK_SUCCESS;
 }
 
@@ -313,6 +327,26 @@ nvk_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
                         const VkDependencyInfo *pDependencyInfo)
 { }
 
+VKAPI_ATTR void VKAPI_CALL
+nvk_CmdBindPipeline(VkCommandBuffer commandBuffer,
+                    VkPipelineBindPoint pipelineBindPoint,
+                    VkPipeline _pipeline)
+{
+   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
+   VK_FROM_HANDLE(nvk_pipeline, pipeline, _pipeline);
+
+   switch (pipelineBindPoint) {
+   case VK_PIPELINE_BIND_POINT_COMPUTE:
+      assert(pipeline->type == NVK_PIPELINE_COMPUTE);
+      nouveau_ws_push_ref(cmd->push,
+                          pipeline->shaders[MESA_SHADER_COMPUTE].bo,
+                          NOUVEAU_WS_BO_RD);
+      cmd->state.cs.pipeline = (struct nvk_compute_pipeline *)pipeline;
+      break;
+   default:
+      unreachable("Unhandled bind point");
+   }
+}
 
 VKAPI_ATTR void VKAPI_CALL
 nvk_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
